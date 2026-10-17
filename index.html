@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Controllo token Solana</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F2F4F1; --surface:#FFFFFF; --ink:#16201B; --muted:#5B665F; --line:#D5DBD5;
+  --pass:#2F7A4F; --warn:#A86C12; --fail:#B83A2E; --info:#5B665F;
+  --pass-bg:#E3F0E8; --warn-bg:#F7ECD9; --fail-bg:#F6E1DE; --info-bg:#E8ECE9;
+  --sans:"Instrument Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#121614; --surface:#1A201D; --ink:#E7ECE8; --muted:#9AA59E; --line:#2C3530;
+    --pass:#5BB585; --warn:#E0A84A; --fail:#E46B5E; --info:#9AA59E;
+    --pass-bg:#1E3127; --warn-bg:#352A17; --fail-bg:#3A1F1C; --info-bg:#232A26;
+    color-scheme: dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.5;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+main{max-width:760px;margin:0 auto;padding:28px 18px 64px}
+h1{font-size:1.75rem;line-height:1.15;margin:0 0 6px;font-weight:700;letter-spacing:-.01em}
+h2{font-size:1.1rem;margin:36px 0 10px;font-weight:600}
+p{margin:0}
+a{color:inherit;text-underline-offset:3px}
+.sub{color:var(--muted);margin-bottom:22px;max-width:60ch}
+form{display:flex;gap:8px;flex-wrap:wrap}
+input[type=text]{flex:1 1 320px;min-width:0;font-family:var(--mono);font-size:.88rem;padding:13px 14px;
+  border:1.5px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
+button{font:inherit;font-weight:600;padding:12px 20px;border-radius:10px;border:0;background:var(--ink);color:var(--bg);cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}
+button.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line);padding:9px 14px}
+:focus-visible{outline:2px solid var(--warn);outline-offset:2px}
+details.settings{margin-top:12px;color:var(--muted);font-size:.9rem}
+details.settings summary{cursor:pointer}
+.settings-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.settings-row input{flex:1 1 280px}
+.status{margin-top:18px;color:var(--muted);min-height:1.5em}
+.errors{margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--warn-bg);font-size:.9rem}
+.errors p+p{margin-top:4px}
+
+/* Identità token */
+.token{display:flex;gap:14px;align-items:center;margin-top:28px}
+.token img{width:56px;height:56px;border-radius:12px;object-fit:cover;background:var(--line);flex:none}
+.token .name{font-size:1.35rem;font-weight:700;line-height:1.2}
+.token .sym{color:var(--muted);font-weight:500}
+.facts{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:4px;color:var(--muted);font-size:.92rem}
+.facts b{color:var(--ink);font-weight:600}
+.links{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.links a{font-size:.88rem;padding:6px 11px;border:1.5px solid var(--line);border-radius:999px;text-decoration:none}
+.links a:hover{border-color:var(--ink)}
+
+/* Pannello verdetto */
+.panel{margin-top:26px;background:var(--surface);border:1.5px solid var(--line);border-radius:16px;padding:18px}
+.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.tile{border-radius:12px;padding:12px 4px 10px;text-align:center;background:var(--info-bg);color:var(--info)}
+.tile .g{font-size:1.9rem;font-weight:700;line-height:1}
+.tile .l{font-size:.78rem;margin-top:6px;color:var(--ink);opacity:.85}
+.tile.pass{background:var(--pass-bg);color:var(--pass)}
+.tile.warn{background:var(--warn-bg);color:var(--warn)}
+.tile.fail{background:var(--fail-bg);color:var(--fail)}
+.verdict{margin-top:16px;font-size:1.3rem;font-weight:700;line-height:1.25}
+.verdict-note{margin-top:4px;color:var(--muted);font-size:.92rem}
+@media (max-width:520px){.tiles{grid-template-columns:repeat(3,1fr)}}
+
+/* Controlli */
+.checks{list-style:none;margin:0;padding:0}
+.check{border-top:1.5px solid var(--line);padding:16px 0;display:grid;grid-template-columns:28px 1fr;gap:4px 12px}
+.check .dot{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:.95rem;
+  background:var(--info-bg);color:var(--info)}
+.check.pass .dot{background:var(--pass-bg);color:var(--pass)}
+.check.warn .dot{background:var(--warn-bg);color:var(--warn)}
+.check.fail .dot{background:var(--fail-bg);color:var(--fail)}
+.check h3{margin:2px 0 0;font-size:1rem;font-weight:600}
+.check .finding{grid-column:2}
+.check ul{grid-column:2;margin:6px 0 0;padding-left:18px;color:var(--muted);font-size:.92rem}
+.check ul li+li{margin-top:3px}
+
+/* Segnalazioni e holder */
+.risks{list-style:none;margin:0;padding:0}
+.risks li{padding:10px 0;border-top:1.5px solid var(--line);font-size:.94rem}
+.risks .lvl{font-weight:600}
+.risks .lvl.danger{color:var(--fail)} .risks .lvl.warn{color:var(--warn)} .risks .lvl.info{color:var(--muted)}
+.risks .desc{color:var(--muted)}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{text-align:left;padding:8px 10px 8px 0;border-top:1.5px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--muted)}
+td.addr{font-family:var(--mono);font-size:.84rem}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+th.num{text-align:right}
+.tag{display:inline-block;font-size:.76rem;padding:2px 8px;border-radius:999px;margin-right:4px;background:var(--info-bg);color:var(--muted)}
+.tag.ins{background:var(--fail-bg);color:var(--fail)}
+.foot{margin-top:40px;color:var(--muted);font-size:.86rem;max-width:62ch}
+@media (prefers-reduced-motion:no-preference){
+  .panel.fresh .tile{animation:pop .35s ease-out both}
+  .panel.fresh .tile:nth-child(2){animation-delay:.05s}.panel.fresh .tile:nth-child(3){animation-delay:.1s}
+  .panel.fresh .tile:nth-child(4){animation-delay:.15s}.panel.fresh .tile:nth-child(5){animation-delay:.2s}
+  .panel.fresh .tile:nth-child(6){animation-delay:.25s}
+  @keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>Controllo token Solana</h1>
+  <p class="sub">Incolla l’indirizzo del contratto (o un link di pump.fun o DexScreener). I dati arrivano da RugCheck, DexScreener e dalla blockchain.</p>
+
+  <form id="form" autocomplete="off">
+    <input type="text" id="ca" placeholder="Indirizzo del contratto" aria-label="Indirizzo del contratto" spellcheck="false">
+    <button type="submit" id="go">Analizza</button>
+  </form>
+
+  <details class="settings">
+    <summary>Impostazioni RPC</summary>
+    <p style="margin-top:8px">L’RPC pubblico di Solana limita le richieste. Se holder o autorità non si caricano, incolla qui l’URL di un RPC gratuito (per esempio Helius).</p>
+    <div class="settings-row">
+      <input type="text" id="rpc" placeholder="https://api.mainnet-beta.solana.com" aria-label="URL RPC" spellcheck="false">
+      <button type="button" class="ghost" id="saveRpc">Salva RPC</button>
+    </div>
+  </details>
+
+  <p class="status" id="status" aria-live="polite"></p>
+  <div id="out"></div>
+
+  <p class="foot">Questi controlli riducono il rischio, non lo eliminano. Una meme coin che li passa tutti può comunque andare a zero. Entra solo con soldi che puoi perdere.</p>
+</main>
+
+<script>
+(() => {
+  const B58 = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
+  const IS_B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  const DEFAULT_RPC = "https://api.mainnet-beta.solana.com";
+  const $ = s => document.querySelector(s);
+
+  function el(tag, props = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (v == null || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = v;
+      else n.setAttribute(k, v);
+    }
+    for (const c of kids.flat()) {
+      if (c == null || c === false) continue;
+      n.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    }
+    return n;
+  }
+
+  // ---------- utilità ----------
+  const storage = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} }
+  };
+  const getRpc = () => storage.get("rpcUrl") || DEFAULT_RPC;
+  const short = a => a ? a.slice(0, 4) + "…" + a.slice(-4) : "";
+  const num = v => (v == null || v === "" || isNaN(Number(v))) ? null : Number(v);
+  const fmtPct = n => n == null ? "n/d" : n.toFixed(1).replace(".", ",") + "%";
+  const usdC = new Intl.NumberFormat("it-IT", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 });
+  const fmtUsd = n => n == null ? "n/d" : usdC.format(n);
+  const fmtPrice = n => n == null ? "n/d" : "$" + (n >= 1 ? n.toFixed(4) : Number(n).toPrecision(3));
+  function fmtAge(ms) {
+    if (!ms) return "n/d";
+    const h = (Date.now() - ms) / 36e5;
+    if (h < 1) return Math.max(1, Math.round(h * 60)) + " min";
+    if (h < 48) return Math.round(h) + " h";
+    return Math.round(h / 24) + " giorni";
+  }
+  const safeUrl = u => (typeof u === "string" && /^https:\/\//i.test(u)) ? u : null;
+
+  async function getJSON(url, opts = {}, ms = 15000) {
+    let t;
+    const timeout = new Promise((_, rej) => { t = setTimeout(() => rej(new Error("tempo scaduto")), ms); });
+    try {
+      const r = await Promise.race([fetch(url, opts), timeout]);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    } catch (e) {
+      if (e instanceof TypeError) throw new Error("richiesta bloccata o rete assente");
+      throw e;
+    } finally { clearTimeout(t); }
+  }
+  async function rpc(method, params) {
+    const j = await getJSON(getRpc(), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
+    });
+    if (j.error) throw new Error(j.error.message || "errore RPC");
+    return j.result;
+  }
+  function collectAddresses(obj, set) {
+    if (obj == null) return set;
+    if (typeof obj === "string") { if (IS_B58.test(obj)) set.add(obj); return set; }
+    if (typeof obj === "object") for (const v of Object.values(obj)) collectAddresses(v, set);
+    return set;
+  }
+  const reason = r => r.status === "rejected" ? (r.reason?.message || "errore") : "";
+
+  // ---------- raccolta dati ----------
+  async function gather(mint, setStatus) {
+    const errors = [];
+    setStatus("Leggo DexScreener e RugCheck…");
+    const [dexR, rcR] = await Promise.allSettled([
+      getJSON(`https://api.dexscreener.com/latest/dex/tokens/${mint}`),
+      getJSON(`https://api.rugcheck.xyz/v1/tokens/${mint}/report`)
+    ]);
+    const dex = dexR.status === "fulfilled" ? dexR.value : null;
+    const rc = rcR.status === "fulfilled" ? rcR.value : null;
+    if (!dex) errors.push("DexScreener non risponde (" + reason(dexR) + ").");
+    if (!rc) errors.push("RugCheck non risponde (" + reason(rcR) + "). Uso la blockchain dove posso.");
+
+    const pairs = (dex?.pairs || []).filter(p => p.chainId === "solana")
+      .sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+
+    const pools = new Set();
+    pairs.forEach(p => p.pairAddress && pools.add(p.pairAddress));
+    if (rc?.markets) collectAddresses(rc.markets, pools);
+    pools.delete(mint);
+
+    let auth = null, supply = null, holders = null, holdersSource = "";
+    if (rc?.token) {
+      auth = { mint: rc.token.mintAuthority || null, freeze: rc.token.freezeAuthority || null };
+      supply = num(rc.token.supply);
+    }
+    if (Array.isArray(rc?.topHolders) && rc.topHolders.length) {
+      holders = rc.topHolders.map(h => {
+        const amount = num(h.amount);
+        return {
+          address: h.address, owner: h.owner || null, amount,
+          pct: (supply && amount != null) ? amount / supply * 100 : num(h.pct),
+          insider: !!h.insider
+        };
+      });
+      holdersSource = "RugCheck";
+    }
+
+    if (!auth || !holders) {
+      setStatus("Leggo la blockchain…");
+      try {
+        const info = await rpc("getAccountInfo", [mint, { encoding: "jsonParsed" }]);
+        const pi = info?.value?.data?.parsed?.info;
+        if (!pi) throw new Error("questo indirizzo non è un token");
+        if (!auth) auth = { mint: pi.mintAuthority || null, freeze: pi.freezeAuthority || null };
+        if (!supply) supply = num(pi.supply);
+        if (!holders) {
+          const la = await rpc("getTokenLargestAccounts", [mint]);
+          const list = la?.value || [];
+          const owners = {};
+          try {
+            const ma = await rpc("getMultipleAccounts", [list.map(x => x.address), { encoding: "jsonParsed" }]);
+            (ma?.value || []).forEach((a, i) => { owners[list[i].address] = a?.data?.parsed?.info?.owner || null; });
+          } catch {}
+          holders = list.map(x => {
+            const amount = num(x.amount);
+            return { address: x.address, owner: owners[x.address] || null, amount,
+              pct: (supply && amount != null) ? amount / supply * 100 : null, insider: false };
+          });
+          holdersSource = "blockchain";
+        }
+      } catch (e) {
+        errors.push("RPC Solana: " + e.message + ". Prova a impostare un RPC tuo.");
+      }
+    }
+
+    if (holders) {
+      holders.forEach(h => { h.isPool = pools.has(h.address) || (h.owner && pools.has(h.owner)); });
+      holders.sort((a, b) => (b.amount || 0) - (a.amount || 0));
+    }
+    return { mint, dex, rc, pairs, pools, auth, supply, holders, holdersSource, errors };
+  }
+
+  // ---------- controlli ----------
+  function checkAuth(d) {
+    const c = { key: "Autorità", title: "Mint e freeze authority", details: [] };
+    if (!d.auth) return { ...c, s: "info", finding: "Dato non disponibile." };
+    if (d.auth.mint) c.details.push(`Mint authority attiva (${short(d.auth.mint)}): può creare nuovi token e diluirti.`);
+    if (d.auth.freeze) c.details.push(`Freeze authority attiva (${short(d.auth.freeze)}): può congelare i wallet e impedirti di vendere.`);
+    return c.details.length
+      ? { ...c, s: "fail", finding: "Almeno un’autorità non è revocata. Lascia perdere." }
+      : { ...c, s: "pass", finding: "Entrambe revocate: nessuno può stampare token o congelare wallet." };
+  }
+
+  function checkHolders(d) {
+    const c = { key: "Holder", title: "Concentrazione dei top holder", details: [] };
+    if (!d.holders || !d.holders.length) return { ...c, s: "info", finding: "Lista holder non disponibile." };
+    const real = d.holders.filter(h => !h.isPool && h.pct != null);
+    const excluded = d.holders.filter(h => h.isPool).length;
+    const top10 = real.slice(0, 10).reduce((a, h) => a + h.pct, 0);
+    const maxOne = real[0]?.pct || 0;
+    let s = "pass";
+    if (top10 > 30 || maxOne > 10) s = "fail";
+    else if (top10 > 20 || maxOne > 5) s = "warn";
+    if (excluded) c.details.push(`Esclusi ${excluded} indirizzi riconosciuti come pool o bonding curve.`);
+    else c.details.push("Nessuna pool riconosciuta: se il primo wallet ha una quota enorme, probabilmente è la bonding curve.");
+    c.details.push(`Fonte: ${d.holdersSource}.`);
+    return { ...c, s, finding: `Primi 10 wallet: ${fmtPct(top10)} della supply. Il più grande da solo: ${fmtPct(maxOne)}.` };
+  }
+
+  function checkInsiders(d) {
+    const c = { key: "Insider", title: "Insider, bundle e sniper", details: [] };
+    if (!d.rc) return { ...c, s: "info", finding: "Serve RugCheck per questo controllo. Guarda Bubblemaps a mano.", details: ["Su Bubblemaps cerca gruppi di wallet collegati tra loro."] };
+    const graph = num(d.rc.graphInsidersDetected) || 0;
+    const ins = (d.holders || []).filter(h => h.insider);
+    const insPct = ins.reduce((a, h) => a + (h.pct || 0), 0);
+    const hits = (d.rc.risks || []).filter(r => /insider|bundle|snip|cluster/i.test(`${r.name || ""} ${r.description || ""}`));
+    const count = Math.max(graph, ins.length);
+    let s = "pass";
+    if (insPct > 10 || count >= 10) s = "fail";
+    else if (count > 0 || hits.length) s = "warn";
+    if (graph) c.details.push(`${graph} wallet insider individuati dall’analisi dei collegamenti.`);
+    if (ins.length) c.details.push(`${ins.length} insider tra i top holder, con ${fmtPct(insPct)} della supply.`);
+    hits.forEach(r => c.details.push(`RugCheck: ${r.name}.`));
+    c.details.push("Conferma visivamente su Bubblemaps.");
+    const finding = s === "pass" ? "Nessun insider rilevato da RugCheck." :
+      `Rilevati ${count || "alcuni"} wallet sospetti collegati al lancio.`;
+    return { ...c, s, finding };
+  }
+
+  function checkDev(d) {
+    const c = { key: "Dev", title: "Wallet del creatore", details: [] };
+    const creator = d.rc?.creator;
+    if (!creator) return { ...c, s: "info", finding: "Creatore non disponibile. Controllalo a mano su Solscan o GMGN." };
+    const bal = num(d.rc.creatorBalance);
+    const balPct = (bal != null && d.supply) ? bal / d.supply * 100 : null;
+    const prev = Array.isArray(d.rc.creatorTokens) ? d.rc.creatorTokens.length : null;
+    let s = "pass";
+    if (prev != null && prev >= 10) s = "fail";
+    else if ((balPct != null && balPct > 2) || (prev != null && prev >= 3)) s = "warn";
+    else if (balPct == null && prev == null) s = "info";
+    c.details.push(`Creatore: ${short(creator)}.`);
+    if (balPct != null) c.details.push(balPct > 0 ? `Ha ancora ${fmtPct(balPct)} della supply.` : "Non detiene più token: ha già venduto o li ha spostati.");
+    if (prev != null) c.details.push(`Altri token lanciati dallo stesso wallet: ${prev}.`);
+    else c.details.push("Storico dei lanci non disponibile: aprilo su GMGN.");
+    const finding = s === "fail" ? "Lancia token in serie: profilo tipico da rug." :
+      s === "warn" ? "Il dev ha ancora peso o ha già lanciato altri token." :
+      s === "info" ? "Dati sul dev incompleti." : "Nessun segnale negativo sul dev.";
+    return { ...c, s, finding };
+  }
+
+  function checkStage(d) {
+    const c = { key: "Fase", title: "Bonding curve o migrata", details: [] };
+    if (!d.pairs.length) return { ...c, s: "info", finding: "Nessuna coppia trovata su DexScreener." };
+    const ids = [...new Set(d.pairs.map(p => p.dexId))];
+    const migrated = ids.some(x => x !== "pumpfun");
+    c.details.push(`Mercati: ${ids.join(", ")}.`);
+    if (!migrated) {
+      c.details.push(`Liquidità sulla curve: ${fmtUsd(d.pairs[0].liquidity?.usd)}.`);
+      return { ...c, s: "warn", finding: "Ancora sulla bonding curve di pump.fun: molto volatile e facile da manipolare." };
+    }
+    let locked = null;
+    (d.rc?.markets || []).forEach(m => {
+      const v = num(m?.lp?.lpLockedPct);
+      if (v != null) locked = Math.max(locked ?? 0, v);
+    });
+    const liq = d.pairs[0].liquidity?.usd;
+    c.details.push(`Liquidità principale: ${fmtUsd(liq)}.`);
+    if (locked != null) c.details.push(`Liquidità bloccata o bruciata: ${fmtPct(locked)}.`);
+    let s = "pass";
+    if (locked != null && locked < 90) s = "warn";
+    if (liq != null && liq < 10000) s = "warn";
+    const finding = s === "pass" ? "Migrata su un DEX con liquidità bloccata." :
+      "Migrata, ma la liquidità è bassa o non del tutto bloccata.";
+    return { ...c, s, finding };
+  }
+
+  function checkActivity(d) {
+    const c = { key: "Attività", title: "Volume e social", details: [] };
+    const p = d.pairs[0];
+    if (!p) return { ...c, s: "info", finding: "Nessun dato di mercato." };
+    const issues = [];
+    const socials = (p.info?.socials || []).length + (p.info?.websites || []).length;
+    if (!socials) issues.push("Nessun sito o social collegato su DexScreener.");
+    const liq = p.liquidity?.usd, vol = p.volume?.h24;
+    if (liq > 0 && vol != null && vol / liq > 25) issues.push(`Volume 24h pari a ${Math.round(vol / liq)} volte la liquidità: possibile wash trading.`);
+    const tx = p.txns?.h24;
+    if (tx) {
+      const tot = (tx.buys || 0) + (tx.sells || 0);
+      if (tot < 30) issues.push("Pochissime transazioni nelle ultime 24 ore.");
+      if (tot >= 50 && (tx.sells || 0) / tot < 0.15) issues.push("Quasi nessuno vende: verifica che la vendita funzioni davvero.");
+      c.details.push(`Ultime 24 ore: ${tx.buys || 0} acquisti, ${tx.sells || 0} vendite, volume ${fmtUsd(vol)}.`);
+    }
+    if (socials) c.details.push(`${socials} link social o sito collegati: aprili e guarda se la community è reale.`);
+    c.details.push(...issues);
+    const s = issues.length === 0 ? "pass" : issues.length === 1 ? "warn" : "fail";
+    const finding = s === "pass" ? "Attività e presenza social nella norma." :
+      `${issues.length} ${issues.length === 1 ? "segnale" : "segnali"} da verificare su volume o social.`;
+    return { ...c, s, finding };
+  }
+
+  // ---------- rendering ----------
+  const GLYPH = { pass: "✓", warn: "!", fail: "✕", info: "?" };
+
+  function verdictText(checks) {
+    const n = s => checks.filter(c => c.s === s).length;
+    const fails = n("fail"), warns = n("warn"), infos = n("info");
+    let v;
+    if (fails) v = "Rischio alto.";
+    else if (warns >= 2) v = "Rischio medio-alto.";
+    else if (warns === 1) v = "Rischio medio.";
+    else v = "Nessun allarme evidente.";
+    const parts = [];
+    if (fails) parts.push(`${fails} ${fails === 1 ? "controllo fallito" : "controlli falliti"}`);
+    if (warns) parts.push(`${warns} da verificare`);
+    if (infos) parts.push(`${infos} senza dati`);
+    const note = (parts.length ? parts.join(", ") + ". " : "") +
+      (fails || warns ? "" : "Resta una meme coin: il rischio non è zero.");
+    return { v, note };
+  }
+
+  function render(d) {
+    const out = $("#out");
+    out.replaceChildren();
+
+    const p = d.pairs[0];
+    const meta = d.rc?.tokenMeta || {};
+    const name = meta.name || p?.baseToken?.name || "Token sconosciuto";
+    const sym = meta.symbol || p?.baseToken?.symbol || "";
+    const img = safeUrl(p?.info?.imageUrl);
+
+    out.append(el("div", { class: "token" },
+      img ? el("img", { src: img, alt: "" }) : el("div", { style: "width:56px;height:56px;border-radius:12px;background:var(--line);flex:none" }),
+      el("div", {},
+        el("div", { class: "name" }, name, sym ? el("span", { class: "sym" }, " $" + sym) : null),
+        el("div", { class: "facts" },
+          el("span", {}, "Market cap ", el("b", { text: fmtUsd(num(p?.marketCap) ?? num(p?.fdv)) })),
+          el("span", {}, "Prezzo ", el("b", { text: fmtPrice(num(p?.priceUsd)) })),
+          el("span", {}, "Età ", el("b", { text: fmtAge(p?.pairCreatedAt) })),
+          d.rc?.totalHolders ? el("span", {}, "Holder ", el("b", { text: String(d.rc.totalHolders) })) : null
+        )
+      )
+    ));
+
+    const m = d.mint;
+    const links = [
+      ["RugCheck", `https://rugcheck.xyz/tokens/${m}`],
+      ["DexScreener", `https://dexscreener.com/solana/${m}`],
+      ["Bubblemaps", `https://app.bubblemaps.io/sol/token/${m}`],
+      ["GMGN", `https://gmgn.ai/sol/token/${m}`],
+      ["Solscan", `https://solscan.io/token/${m}`],
+      ["pump.fun", `https://pump.fun/coin/${m}`]
+    ];
+    if (d.rc?.creator) links.push(["Wallet del dev", `https://gmgn.ai/sol/address/${d.rc.creator}`]);
+    out.append(el("div", { class: "links" },
+      links.map(([t, u]) => el("a", { href: u, target: "_blank", rel: "noopener noreferrer", text: t }))));
+
+    const checks = [checkAuth(d), checkHolders(d), checkInsiders(d), checkDev(d), checkStage(d), checkActivity(d)];
+    const { v, note } = verdictText(checks);
+
+    out.append(el("section", { class: "panel fresh", "aria-label": "Esito dei controlli" },
+      el("div", { class: "tiles" }, checks.map(c =>
+        el("div", { class: "tile " + c.s, title: c.title },
+          el("div", { class: "g", "aria-hidden": "true", text: GLYPH[c.s] }),
+          el("div", { class: "l", text: c.key })))),
+      el("p", { class: "verdict", text: v }),
+      note ? el("p", { class: "verdict-note", text: note }) : null
+    ));
+
+    out.append(el("h2", { text: "Dettaglio dei controlli" }));
+    out.append(el("ul", { class: "checks" }, checks.map(c =>
+      el("li", { class: "check " + c.s },
+        el("span", { class: "dot", "aria-hidden": "true", text: GLYPH[c.s] }),
+        el("h3", { text: c.title }),
+        el("p", { class: "finding", text: c.finding }),
+        c.details.length ? el("ul", {}, c.details.map(t => el("li", { text: t }))) : null
+      ))));
+
+    const risks = Array.isArray(d.rc?.risks) ? d.rc.risks : [];
+    if (d.rc) {
+      const score = num(d.rc.score_normalised);
+      out.append(el("h2", { text: "Segnalazioni di RugCheck" + (score != null ? ` (punteggio ${score}, più basso è meglio)` : "") }));
+      if (d.rc.rugged) out.append(el("p", { class: "errors", text: "RugCheck segna questo token come già ruggato." }));
+      out.append(risks.length
+        ? el("ul", { class: "risks" }, risks.map(r =>
+            el("li", {},
+              el("span", { class: "lvl " + (r.level === "danger" ? "danger" : r.level === "warn" ? "warn" : "info"), text: r.name || "Segnalazione" }),
+              r.value ? " " + r.value : "",
+              r.description ? el("div", { class: "desc", text: r.description }) : null)))
+        : el("p", { class: "verdict-note", text: "Nessuna segnalazione." }));
+    }
+
+    if (d.holders?.length) {
+      out.append(el("h2", { text: "Top holder" }));
+      out.append(el("div", { class: "table-wrap" }, el("table", {},
+        el("thead", {}, el("tr", {}, el("th", { text: "#" }), el("th", { text: "Wallet" }), el("th", { class: "num", text: "Quota" }), el("th", { text: "Note" }))),
+        el("tbody", {}, d.holders.slice(0, 15).map((h, i) => {
+          const who = h.owner || h.address;
+          return el("tr", {},
+            el("td", { text: String(i + 1) }),
+            el("td", { class: "addr" }, el("a", { href: `https://solscan.io/account/${who}`, target: "_blank", rel: "noopener noreferrer", text: short(who) })),
+            el("td", { class: "num", text: fmtPct(h.pct) }),
+            el("td", {},
+              h.isPool ? el("span", { class: "tag", text: "pool o curve" }) : null,
+              h.insider ? el("span", { class: "tag ins", text: "insider" }) : null));
+        }))
+      )));
+    }
+
+    if (d.errors.length) {
+      out.prepend(el("div", { class: "errors" }, d.errors.map(t => el("p", { text: t }))));
+    }
+  }
+
+  // ---------- eventi ----------
+  const status = t => { $("#status").textContent = t; };
+
+  $("#rpc").value = storage.get("rpcUrl") || "";
+  $("#saveRpc").addEventListener("click", () => {
+    const v = $("#rpc").value.trim();
+    if (v && !/^https:\/\//i.test(v)) { status("L’URL dell’RPC deve iniziare con https://"); return; }
+    storage.set("rpcUrl", v);
+    status(v ? "RPC salvato." : "Torno all’RPC pubblico.");
+  });
+
+  $("#form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const raw = $("#ca").value.trim();
+    const found = raw.match(B58);
+    const mint = found ? found[found.length - 1] : null;
+    if (!mint) { status("Non trovo un indirizzo Solana valido. Incolla il contratto completo."); return; }
+    $("#ca").value = mint;
+    const btn = $("#go");
+    btn.disabled = true;
+    $("#out").replaceChildren();
+    try {
+      const d = await gather(mint, status);
+      if (!d.dex && !d.rc && !d.auth) {
+        status("Nessuna fonte ha risposto. Controlla la connessione o imposta un RPC tuo.");
+        if (d.errors.length) $("#out").append(el("div", { class: "errors" }, d.errors.map(t => el("p", { text: t }))));
+        return;
+      }
+      render(d);
+      status("Analisi completata alle " + new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) + ".");
+      const u = new URL(location.href); u.searchParams.set("ca", mint);
+      try { history.replaceState(null, "", u); } catch {}
+    } catch (err) {
+      status("Analisi interrotta: " + (err.message || err));
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  const pre = new URLSearchParams(location.search).get("ca");
+  if (pre) { $("#ca").value = pre; $("#form").requestSubmit(); }
+})();
+</script>
+</body>
+</html>
